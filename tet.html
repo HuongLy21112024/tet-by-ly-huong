@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Photo Effect 2026 - By Hương Ly</title>
+    <style>
+        :root { --matrix-color: #00ff41; --bg-dark: #0a0a0a; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-dark); color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        
+        /* Giao diện Container */
+        .container { background: #161616; padding: 25px; border-radius: 15px; box-shadow: 0 10px 50px rgba(0,0,0,0.9); max-width: 1000px; width: 95%; text-align: center; border: 1px solid #333; position: relative; }
+        
+        /* Chữ ký Hương Ly */
+        .signature { position: absolute; top: 15px; right: 20px; font-family: 'Courier New', monospace; color: var(--matrix-color); font-size: 14px; opacity: 0.8; }
+
+        h2 { font-family: 'Courier New', monospace; color: var(--matrix-color); margin-bottom: 25px; text-shadow: 0 0 5px var(--matrix-color); }
+        
+        /* Điều khiển */
+        .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        input, select, button { padding: 12px; border-radius: 8px; border: 1px solid #333; font-size: 14px; outline: none; transition: 0.3s; }
+        
+        input[type="text"], select { background: #222; color: var(--matrix-color); font-family: 'Courier New', monospace; }
+        input[type="file"] { background: #222; color: #aaa; font-size: 12px; }
+        
+        button { cursor: pointer; font-weight: bold; background: #008138; color: white; border: none; }
+        button:hover { background: var(--matrix-color); color: black; box-shadow: 0 0 15px var(--matrix-color); }
+
+        #canvas-container { position: relative; border: 2px solid #444; border-radius: 10px; overflow: hidden; background: #000; display: flex; align-items: center; justify-content: center; margin-top: 10px; }
+        canvas { max-width: 100%; height: auto; cursor: crosshair; display: block; }
+        
+        .status-msg { font-size: 0.85em; color: #ffca28; margin-top: 15px; font-family: 'Courier New', monospace; min-height: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="signature">Code by - Hương Ly</div>
+    <h2>> NEW_YEAR_PROCESSOR_v2.0</h2>
+    
+    <div class="controls">
+        <input type="file" id="upload-img" accept="image/*">
+        <input type="text" id="user-name" placeholder="Nhập tên của bạn..." maxlength="15">
+        <select id="effect-type">
+            <option value="none">-- Chọn Hiệu Ứng --</option>
+            <option value="tet">🧧 Tết Đoàn Viên (Lì xì, Quất, Pháo)</option>
+            <option value="snow">❄️ Tuyết Rơi Mùa Đông</option>
+            <option value="flower">🌸 Hoa Anh Đào Xuân</option>
+            <option value="heart">❤️ Valentine Ngọt Ngào</option>
+            <option value="star">⭐ Ngôi Sao May Mắn</option>
+        </select>
+        <button id="download-btn">XUẤT_FILE_ẢNH</button>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    <div id="status" class="status-msg">Hệ thống sẵn sàng. Vui lòng nhập thông tin...</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const uploadInput = document.getElementById('upload-img');
+    const nameInput = document.getElementById('user-name');
+    const effectSelect = document.getElementById('effect-type');
+    const downloadBtn = document.getElementById('download-btn');
+    const statusMsg = document.getElementById('status');
+
+    let bgImage = new Image();
+    let particles = [];
+    let animationId = null;
+    let timerId = null;
+    let imageLoaded = false;
+    let showText = false;
+    let currentWish = "";
+
+    // Danh sách icon đa dạng (Thêm icon Tết)
+    const config = {
+        tet: { chars: ['🧧', '🍊', '🎆', '🧨', '🏮'], baseSize: 22, count: 25 },
+        snow: { chars: ['❄️', '❅', '❆'], baseSize: 12, count: 45 },
+        flower: { chars: ['🌸', '🌺'], baseSize: 18, count: 25 },
+        heart: { chars: ['❤️', '💖', '✨'], baseSize: 20, count: 15 },
+        star: { chars: ['⭐', '🌟'], baseSize: 15, count: 30 }
+    };
+
+    // 40+ Lời chúc random
+    const wishes = [
+        "Vạn sự như ý - Tỷ sự như mơ", "An khang thịnh vượng - Phát tài phát lộc",
+        "Sức khỏe dồi dào - Hạnh phúc bền lâu", "Công thành danh toại - Sự nghiệp thăng hoa",
+        "Tiền vào như nước - Muộn phiền tan biến", "Bình an may mắn - Trọn vẹn niềm vui",
+        "Sống bằng đam mê - Code không lỗi", "Deployment thành công - Bug tự biến mất",
+        "Logic luôn thông suốt - Deadline luôn lùi xa", "Zero Bug - Full Happiness",
+        "Lộc biếc mai vàng - Xuân sang hạnh phúc", "Vạn sự hanh thông - Ngàn điều như ý",
+        "Túi luôn đầy tiền - Tâm luôn ấm áp", "Năm mới rực rỡ - Không gì cản bước",
+        "Buồn phiền Delete - Hạnh phúc Ctrl+S", "Năm 2026 - Chỉ có thành công!"
+        // ... (Bạn có thể thêm tiếp các câu chúc từ danh sách trước vào đây)
+    ];
+
+    uploadInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            bgImage = new Image();
+            bgImage.onload = () => {
+                const maxDim = 1000;
+                let scale = Math.min(maxDim / bgImage.width, maxDim / bgImage.height, 1);
+                canvas.width = bgImage.width * scale;
+                canvas.height = bgImage.height * scale;
+                imageLoaded = true;
+                resetAndStart();
+            };
+            bgImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    class Particle {
+        constructor(type, x, y) {
+            this.type = type;
+            const chars = config[type].chars;
+            this.char = chars[Math.floor(Math.random() * chars.length)];
+            this.init(x, y);
+        }
+        init(x, y) {
+            this.x = x !== undefined ? x : Math.random() * canvas.width;
+            this.y = y !== undefined ? y : Math.random() * canvas.height;
+            this.size = config[this.type].baseSize * (Math.random() * 1.2 + 0.6);
+            this.speed = Math.random() * 1 + 0.5;
+            this.wind = Math.random() * 0.4 - 0.2;
+            this.opacity = Math.random() * 0.5 + 0.5;
+            this.swingStep = Math.random() * 1000;
+            this.swingSpeed = Math.random() * 0.01 + 0.005;
+        }
+        update() {
+            this.y += this.speed;
+            this.swingStep += this.swingSpeed;
+            this.x += this.wind + Math.sin(this.swingStep) * 0.8;
+            if (this.y > canvas.height + 40) {
+                this.y = -50;
+                this.x = Math.random() * canvas.width;
+            }
+        }
+        draw() {
+            ctx.save();
+            ctx.globalAlpha = this.opacity;
+            ctx.font = `${this.size}px Arial`;
+            ctx.textAlign = "center";
+            ctx.fillText(this.char, this.x, this.y);
+            ctx.restore();
+        }
+    }
+
+    function drawCodeText() {
+        if (!showText) return;
+        const name = nameInput.value.trim().toUpperCase() || "FRIEND";
+        const fontSize = Math.max(canvas.width * 0.045, 22);
+        
+        ctx.save();
+        // Overlay nền mờ
+        ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+        ctx.fillRect(0, canvas.height - fontSize * 3.8, canvas.width, fontSize * 3.8);
+        
+        // Dòng 1: HAPPY NEW YEAR
+        ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+        ctx.fillStyle = "#00ff41";
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#00ff41";
+        ctx.fillText("HAPPY NEW YEAR 2026", canvas.width / 2, canvas.height - fontSize * 2.1);
+        
+        // Dòng 2: Lời chúc & Tên
+        ctx.font = `bold ${fontSize * 0.4}px 'Courier New', monospace`;
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = "#ffffff";
+        ctx.fillText(`> USER: ${name} | WISH: ${currentWish}`, canvas.width / 2, canvas.height - fontSize * 1.1);
+        
+        // Dòng 3: Credits (Hương Ly)
+        ctx.font = `italic ${fontSize * 0.3}px 'Courier New', monospace`;
+        ctx.fillStyle = "#00ff41";
+        ctx.fillText(`[System_Processed_by_Huong_Ly]`, canvas.width / 2, canvas.height - fontSize * 0.5);
+        ctx.restore();
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (!imageLoaded || effectSelect.value === 'none') return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        for (let i = 0; i < 10; i++) particles.push(new Particle(effectSelect.value, mouseX, mouseY));
+        if (particles.length > 150) particles.splice(0, 10);
+    });
+
+    function resetAndStart() {
+        if (animationId) cancelAnimationFrame(animationId);
+        if (timerId) clearTimeout(timerId);
+        showText = false;
+        particles = [];
+        if (!imageLoaded) return;
+
+        const type = effectSelect.value;
+        if (type !== 'none') {
+            currentWish = wishes[Math.floor(Math.random() * wishes.length)];
+            statusMsg.innerText = `> Loading AI_Ly_Module... (10s remaining)`;
+            timerId = setTimeout(() => {
+                showText = true;
+                statusMsg.innerText = "> Task Complete. Ready to Download.";
+            }, 10000);
+            for(let i = 0; i < config[type].count; i++) particles.push(new Particle(type));
+            animate();
+        } else {
+            statusMsg.innerText = "> Standby Mode.";
+            ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    function animate() {
+        ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+        particles.forEach(p => { p.update(); p.draw(); });
+        drawCodeText();
+        animationId = requestAnimationFrame(animate);
+    }
+
+    effectSelect.addEventListener('change', resetAndStart);
+
+    downloadBtn.addEventListener('click', () => {
+        if (!imageLoaded) return alert("Vui lòng tải ảnh!");
+        const link = document.createElement('a');
+        link.download = `HappyNewYear_2026_by_HuongLy.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+</script>
+</body>
+</html>
